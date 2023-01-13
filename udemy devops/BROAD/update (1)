@@ -1,0 +1,194 @@
+def gitConfigScriptsUpdateOptions = "config,scripts"
+def gitScriptsUpdateOptions = "scripts"
+
+def getGitUpdateShellScript(updateOptions, configPath, scriptsPath, user) {
+  def variables = """
+    updateOptions=${updateOptions}
+    configPath=${configPath}
+    scriptsPath=${scriptsPath}
+    user=${user}
+  """
+
+  def script = '''
+    #!/bin/bash
+
+    set -o pipefail # trace ERR through pipes
+    set -o errtrace # trace ERR through 'time command' and other functions
+    set -o errexit  ## set -e : exit the script if any statement returns a non-true return value
+    set -a
+    set -o xtrace
+
+    echo "Update ${updateOptions}"
+    echo "Config Path ${configPath}"
+    echo "Scripts Path ${scriptsPath}"
+    echo "User: ${user}"
+    
+    updateTypes=()
+    IFS=', ' read -r -a updateTypes <<< ${updateOptions}  <echo>2
+    for updateType in "${updateTypes[@]}"
+    do
+        if [[ $updateType -eq "config" ]]
+        then
+            if [ -z $configPath ]
+            then
+                echo "config path not available"
+                exit 1
+            fi
+            sudo runuser -l ${user} -c "cd ${configPath} && git pull"
+        fi
+        if [[ $updateType -eq "scripts" ]]
+        then
+            if [ -z $scriptsPath ]
+            then
+                echo "scripts path not available"
+                exit 1
+            fi
+            sudo runuser -l ${user} -c "cd ${scriptsPath} && git pull"
+        fi
+    done
+  '''
+  return variables + script
+}
+
+def envChoices = ['SIT', 'UAT', 'PRE', 'PROD']
+def agents = [
+    "UAT": [
+        "cpe1": "PA1UVLCPEA1",
+        "cpe2": "PA1UVLCPEA2",
+        "tcl1": "PA1UVLTCLA1",
+        "tcl2": "PA1UVLTCLA2",
+        "tco1": "PA1UVLTCOA1",
+        "tco2": "PA1UVLTCOA2",
+    ],
+    "SIT": [
+        "sit": "FR2TVLTCOA1"
+    ]
+]
+def userMap = [
+    "UAT": "SA-UATS-CPE-User",
+    "SIT": "SA-SIT-CPE-User"
+]
+
+def configRunParamKey = 'configrun'
+def envParamKey = 'ENV'
+def configPathParamKey = 'CONFIG_PATH'
+def scriptsPathParamKey = 'SCRIPTS_PATH'
+def cpe1UpdateParamKey = 'CPE1_UPDATE'
+def cpe2UpdateParamKey = 'CPE2_UPDATE'
+def tcl1UpdateParamKey = 'TCL1_UPDATE'
+def tcl2UpdateParamKey = 'TCL2_UPDATE'
+def tco1UpdateParamKey = 'TCO1_UPDATE'
+def tco2UpdateParamKey = 'TCO2_UPDATE'
+def sitUpdateParamKey = 'SIT_UPDATE'
+
+pipeline {
+    agent any 
+    parameters {
+      booleanParam configRunParamKey
+
+      choice(name: envParamKey, choices: envChoices, description: '')
+
+      string(name: configPathParamKey, defaultValue: '', description: '')
+      string(name: scriptsPathParamKey, defaultValue: '', description: '')
+  
+      extendedChoice multiSelectDelimiter: ',', name: cpe1UpdateParamKey, quoteValue: false, saveJSONParameterToFile: false, type: 'PT_CHECKBOX', value: gitConfigScriptsUpdateOptions, visibleItemCount: 3
+      extendedChoice multiSelectDelimiter: ',', name: cpe2UpdateParamKey, quoteValue: false, saveJSONParameterToFile: false, type: 'PT_CHECKBOX', value: gitConfigScriptsUpdateOptions, visibleItemCount: 3
+
+      extendedChoice multiSelectDelimiter: ',', name: tcl1UpdateParamKey, quoteValue: false, saveJSONParameterToFile: false, type: 'PT_CHECKBOX', value: gitScriptsUpdateOptions, visibleItemCount: 3
+      extendedChoice multiSelectDelimiter: ',', name: tcl2UpdateParamKey, quoteValue: false, saveJSONParameterToFile: false, type: 'PT_CHECKBOX', value: gitScriptsUpdateOptions, visibleItemCount: 3
+      
+      extendedChoice multiSelectDelimiter: ',', name: tco1UpdateParamKey, quoteValue: false, saveJSONParameterToFile: false, type: 'PT_CHECKBOX', value: gitScriptsUpdateOptions, visibleItemCount: 3
+      extendedChoice multiSelectDelimiter: ',', name: tco2UpdateParamKey, quoteValue: false, saveJSONParameterToFile: false, type: 'PT_CHECKBOX', value: gitScriptsUpdateOptions, visibleItemCount: 3
+      
+      extendedChoice multiSelectDelimiter: ',', name: sitUpdateParamKey, quoteValue: false, saveJSONParameterToFile: false, type: 'PT_CHECKBOX', value: gitConfigScriptsUpdateOptions, visibleItemCount: 3
+    }
+    stages {
+      stage('Check Config Run') {
+        steps {
+              sh '''#!/bin/bash
+                      if [[ ${configrun} == "true" ]]; then
+                      echo "Loading the latest config. Please run the build again"
+                      exit 1
+                      fi
+                      if [[ -z ${configrun} ]]; then
+                      echo "Loading the config for first build. Please run the build again"
+                      exit 1
+                      fi
+              '''
+          }
+      }
+      stage('CPE1') {
+          // when {
+          //   expression {}
+          //   beforeAgent true
+          // }
+          agent {
+              label agents[params[envParamKey]]['cpe1']
+          }
+          steps {
+              echo "Update ${params[cpe1UpdateParamKey]} on CPE1"
+              sh getGitUpdateShellScript(params[cpe1UpdateParamKey], params[configPathParamKey], params[scriptsPathParamKey], userMap[params[envParamKey]])
+          }
+      }
+
+      stage('CPE2') {
+          agent {
+              label agents[params[envParamKey]]['cpe2']
+          }
+          steps {
+              echo "Update ${params[cpe2UpdateParamKey]} on CPE2"
+              sh getGitUpdateShellScript(params[cpe2UpdateParamKey], params[configPathParamKey], params[scriptsPathParamKey], userMap[params[envParamKey]])
+          }
+      }
+
+
+      stage('TCL1') {
+         agent {
+              label agents[params[envParamKey]]['tcl1']
+          }
+          steps {
+              echo "Update ${params[tcl1UpdateParamKey]} on TCL1"
+              sh getGitUpdateShellScript(params[tcl1UpdateParamKey], params[configPathParamKey], params[scriptsPathParamKey], userMap[params[envParamKey]])
+          }
+      }
+      stage('TCL2') {
+         agent {
+              label agents[params[envParamKey]]['tcl2']
+          }
+          steps {
+              echo "Update ${params[tcl2UpdateParamKey]} on TCL2"
+               sh getGitUpdateShellScript(params[tcl2UpdateParamKey], params[configPathParamKey], params[scriptsPathParamKey], userMap[params[envParamKey]])
+          }
+      }
+
+
+      stage('TCO1') {
+         agent {
+              label agents[params[envParamKey]]['tco1']
+          }
+          steps {
+              echo "Update ${params[tco1UpdateParamKey]} on TCO1"
+               sh getGitUpdateShellScript(params[tco1UpdateParamKey], params[configPathParamKey], params[scriptsPathParamKey], userMap[params[envParamKey]])
+          }
+      }
+      stage('TCO2') {
+         agent {
+              label agents[params[envParamKey]]['tco2']
+          }
+          steps {
+              echo "Update ${params[tco2UpdateParamKey]} on TCO2"
+              sh getGitUpdateShellScript(params[tco2UpdateParamKey], params[configPathParamKey], params[scriptsPathParamKey], userMap[params[envParamKey]])
+          }
+      }
+
+      stage('SIT') {
+         agent {
+              label agents[params[envParamKey]]['sit']
+          }
+          steps {
+              echo "Update ${params[sitUpdateParamKey]} on SIT"
+              sh getGitUpdateShellScript(params[sitUpdateParamKey], params[configPathParamKey], params[scriptsPathParamKey], userMap[params[envParamKey]])
+          }
+      }
+    }
+}

@@ -1,0 +1,400 @@
+def CPE = "bam, cds-collector, cds-rest, configuration-server, cpe-dmz-log-collector, cpe-log-endpoint, ods, pds-archive, pds-collector, pds-rest, pds-tracker, report-business-vault, report-generator, report-raw-vault, report-scheduler, tsc-cpe-log-push"
+def TCL = "cpe-integration-tph-collector, tph-gui-log-push, tph-gui, tph-jobserver-cpe-file-collector-logs, tph-jobserver-log-push, tph-jobserver, tsc-tcl-log-push"
+def TCO = "cpe-integration-tcu-collector, tbc-log-push, tbc, tcu-dialog-log-push, tcu-dialog, tcu-ebics-server-log-push, tcu-ebics-server, tcu-jobserver-log-push, tcu-jobserver, tcu-webservices-log-push, tcu-webservices, tl-dialog-log-push, tl-dialog, tl-engine-log-push, tl-engine, tlk-connector, tsc-tco-log-push"
+def TPO = "tsc-tpo-log-push, cpe-integration-tp-collector, tp-gui-log-push, tp-gui, tp-services-log-push, tp-services, tp-services-cpe-file-collector-port-services-logs, tps, tps-log-push"
+def TPX = "tp-gui-log-push, tp-gui, tem-server-log-push, tem-server, tcu-ebics-proxy-cpe-file-collector-logs, tcu-ebics-proxy-log-push, tcu-ebics-proxy, tcu-servlet-cpe-file-collector-logs, tcu-servlet-log-push, tcu-servlet"
+def TIB = "tiu-dialog-log-push, tiu-dialog, tiu-engine, tiu-engine-log-push"
+def SIT = "bam, tsc-appzone-log-push, cpe-dmz-log-collector"
+
+def configRunParamKey = 'configrun'
+def envChoices = ['SIT', 'UAT', 'PRE', 'PROD']
+actionParamKey = 'ACTION'
+actionChoices = ['restart', 'deploy']
+def cpe1ParamKey = 'CPE1'
+def cpe2ParamKey = 'CPE2'
+def tcl1ParamKey = 'TCL1'
+def tcl2ParamKey = 'TCL2'
+def tco1ParamKey = 'TCO1'
+def tco2ParamKey = 'TCO2'
+def tpo1ParamKey = 'TPO1'
+def tpo2ParamKey = 'TPO2'
+def tpx1ParamKey = 'TPX1'
+def tpx2ParamKey = 'TPX2'
+def tib1ParamKey = 'TIB1'
+def tib2ParamKey = 'TIB2'
+def sitParamKey = 'SIT'
+def agents = [
+    "UAT": [
+        "cpe1": "PA1UVLCPEA1",
+        "cpe2": "PA1UVLCPEA2",
+        "tcl1": "PA1UVLTCLA1",
+        "tcl2": "PA1UVLTCLA2",
+        "tco1": "PA1UVLTCOA1",
+        "tco2": "PA1UVLTCOA2",
+        "tpo1": "PA1UVLTPOA1",
+        "tpo2": "PA1UVLTPOA2",
+        "tpx1": "PA1UVLTPXA1",
+        "tpx2": "PA1UVLTPXA2",
+        "tib1": "PA1UVLTIBA1",
+        "tib2": "PA1UVLTIBA2",
+    ],
+    "SIT": [
+        "sit": "FR2TVLTCOA1"
+    ]
+]
+
+// GLOBAL VARIABLES --- accessible from inside functions
+envParamKey = 'ENV'
+envPrefixMap = [
+    'SIT': 'sit1',
+    'UAT': 'uat',
+    'PRE': '',
+    'PROD': 'prd',
+]
+
+def getShellScript(components, params) {
+  // NOTE: envPrefixMap and envParamKey are global variables
+  def variables = """
+    components=${components}
+    action=${params[actionParamKey]}
+    STAGE=${envPrefixMap[params[envParamKey]]}
+  """
+
+  def script = '''
+    #!/bin/bash
+
+    set -o pipefail # trace ERR through pipes
+    set -o errtrace # trace ERR through 'time command' and other functions
+    set -o errexit  ## set -e : exit the script if any statement returns a non-true return value
+    set -a
+    set -o xtrace
+
+    echo "Action: ${action}"
+    echo "Components: ${components}"
+    echo "Stage: ${STAGE}"
+
+    STAGE_CAPITAL=${STAGE^^}
+    echo "Stage Capital: ${STAGE_CAPITAL}"
+
+    ## services map
+    # format: <Unix username>|<Systemd service>|<install script>
+
+    # CPE VM services
+    bam="SA-$STAGE_CAPITAL-CPE-User|bam|bam"
+    cds_collector="SA-$STAGE_CAPITAL-CPE-User|cds-collector|cds-collector"
+    cds_rest="SA-$STAGE_CAPITAL-CPE-User|cds-rest|cds-rest"
+    configuration_server="SA-$STAGE_CAPITAL-CPE-User|configuration-server|configuration-server"
+    cpe_dmz_log_collector="SA-$STAGE_CAPITAL-CPE-User|cpe-dmz-log-collector|cpe-dmz-log-collector"
+    cpe_log_endpoint="SA-$STAGE_CAPITAL-CPE-User|cpe-log-endpoint|cpe-log-endpoint"
+    # TODO: ha-proxy
+    ods="SA-$STAGE_CAPITAL-CPE-User|ods|ods"
+    pds_archive="SA-$STAGE_CAPITAL-CPE-User|pds-archive|pds-archive"
+    pds_collector="SA-$STAGE_CAPITAL-CPE-User|pds-collector|pds-collector"
+    pds_rest="SA-$STAGE_CAPITAL-CPE-User|pds-rest|pds-rest"
+    pds_tracker="SA-$STAGE_CAPITAL-CPE-User|pds-tracker|pds-tracker"
+    report_business_vault="SA-$STAGE_CAPITAL-CPE-User|report-business-vault|report-business-vault"
+    report_generator="SA-$STAGE_CAPITAL-CPE-User|report-generator|report-generator"
+    report_raw_vault="SA-$STAGE_CAPITAL-CPE-User|report-raw-vault|report-raw-vault"
+    report_scheduler="SA-$STAGE_CAPITAL-CPE-User|report-scheduler|report-scheduler"
+    tsc_cpe_log_push="SA-$STAGE_CAPITAL-CPE-User|tsc-log-push|tsc-cpe-log-push"
+
+    # TCL VM Services
+    cpe_integration_tph_collector="SA-$STAGE_CAPITAL-TPH-User|cpe-integration-tph-collector|cpe-integration-tph-collector"
+    tph_gui_log_push="SA-$STAGE_CAPITAL-TPH-User|tph-gui-log-push|tph-gui-log-push"
+    tph_gui="SA-$STAGE_CAPITAL-TPH-User|tph-gui|tph-gui"
+    tph_jobserver_cpe_file_collector_logs="SA-$STAGE_CAPITAL-TPH-User|tph-jobserver-cpe-file-collector-logs|tph-jobserver-cpe-file-collector-logs"
+    tph_jobserver_log_push="SA-$STAGE_CAPITAL-TPH-User|tph-jobserver-log-push|tph-jobserver-log-push"
+    tph_jobserver="SA-$STAGE_CAPITAL-TPH-User|tph-jobserver|tph-jobserver"
+    tsc_tcl_log_push="SA-$STAGE_CAPITAL-CPE-User|tsc-log-push|tsc-tcl-log-push"
+
+    # TCO VM Services
+    cpe_integration_tcu_collector="SA-$STAGE_CAPITAL-TCU-User|cpe-integration-tcu-collector|cpe-integration-tcu-collector"
+    tbc_log_push="SA-$STAGE_CAPITAL-TBC-User|tbc-log-push|tbc-log-push"
+    tbc="SA-$STAGE_CAPITAL-TBC-User|tbc|tbc"
+    tcu_dialog_log_push="SA-$STAGE_CAPITAL-TCU-User|tcu-dialog-log-push|tcu-dialog-log-push"
+    tcu_dialog="SA-$STAGE_CAPITAL-TCU-User|tcu-dialog|tcu-dialog"
+    tcu_ebics_server_log_push="SA-$STAGE_CAPITAL-TCU-User|tcu-ebics-server-log-push|tcu-ebics-server-log-push"
+    tcu_ebics_server="SA-$STAGE_CAPITAL-TCU-User|tcu-ebics-server|tcu-ebics-server"
+    tcu_jobserver_log_push="SA-$STAGE_CAPITAL-TCU-User|tcu-jobserver-log-push|tcu-jobserver-log-push"
+    tcu_jobserver="SA-$STAGE_CAPITAL-TCU-User|tcu-jobserver|tcu-jobserver"
+    tcu_webservices_log_push="SA-$STAGE_CAPITAL-TCU-User|tcu-webservices-log-push|tcu-webservices-log-push"
+    tcu_webservices="SA-$STAGE_CAPITAL-TCU-User|tcu-webservices|tcu-webservices"
+    tl_dialog_log_push="SA-$STAGE_CAPITAL-TL-User|tl-dialog-log-push|tl-dialog-log-push"
+    tl_dialog="SA-$STAGE_CAPITAL-TL-User|tl-dialog|tl-dialog"
+    tl_engine_log_push="SA-$STAGE_CAPITAL-TL-User|tl-engine-log-push|tl-engine-log-push"
+    tl_engine="SA-$STAGE_CAPITAL-TL-User|tl-engine|tl-engine"
+    tlk_connector="SA-$STAGE_CAPITAL-TL-User|tlk-connector|tlk-connector"
+    tsc_tco_log_push="SA-$STAGE_CAPITAL-CPE-User|tsc-log-push|tsc-tco-log-push"
+
+    # TPO VM Services
+    tsc_tpo_log_push="SA-$STAGE_CAPITAL-CPE-User|tsc-log-push|tsc-tpo-log-push" 
+    cpe_integration_tp_collector="SA-$STAGE_CAPITAL-TP-User|cpe-integration-tp-collector|cpe-integration-tp-collector" 
+    tp_gui_log_push="SA-$STAGE_CAPITAL-TP-User|tp-gui-log-push|tp-gui-log-push" 
+    tp_gui="SA-$STAGE_CAPITAL-TP-User|tp-gui|tp-gui" 
+    tp_services_log_push="SA-$STAGE_CAPITAL-TP-User|tp-services-log-push|tp-services-log-push" 
+    tp_services="SA-$STAGE_CAPITAL-TP-User|tp-services|tp-services" 
+    tp_services_cpe_file_collector_port_services_logs="SA-$STAGE_CAPITAL-TP-User|tp-services-cpe-file-collector-port-services-logs|tp-services-cpe-file-collector-port-services-logs" 
+    tps="SA-$STAGE_CAPITAL-TPS-User|tps|tps" 
+    tps_log_push="SA-$STAGE_CAPITAL-TPS-User|tps-log-push|tps-log-push"
+
+    # TPX VM Services
+    tp_gui_log_push="SA-$STAGE_CAPITAL-TP-User|tp-gui-log-push|tp-gui-log-push" 
+    tp_gui="SA-$STAGE_CAPITAL-TP-User|tp-gui|tp-gui" 
+    tem_server_log_push="SA-$STAGE_CAPITAL-TP-User|tem-server-log-push|tem-server-log-push" 
+    tem_server="SA-$STAGE_CAPITAL-TP-User|tem-server|tem-server" 
+    tcu_ebics_proxy_cpe_file_collector_logs="SA-$STAGE_CAPITAL-TCU-User|tcu-ebics-proxy-cpe-file-collector-logs|tcu-ebics-proxy-cpe-file-collector-logs" 
+    tcu_ebics_proxy_log_push="SA-$STAGE_CAPITAL-TCU-User|tcu-ebics-proxy-log-push|tcu-ebics-proxy-log-push" 
+    tcu_ebics_proxy="SA-$STAGE_CAPITAL-TCU-User|tcu-ebics-proxy|tcu-ebics-proxy" 
+    tcu_servlet_cpe_file_collector_logs="SA-$STAGE_CAPITAL-TCU-User|tcu-servlet-cpe-file-collector-logs|tcu-servlet-cpe-file-collector-logs" 
+    tcu_servlet_log_push="SA-$STAGE_CAPITAL-TCU-User|tcu-servlet-log-push|tcu-servlet-log-push" 
+    tcu_servlet="SA-$STAGE_CAPITAL-TCU-User|tcu-servlet|tcu-servlet"
+
+    # TIB VM Services
+    tiu_dialog_log_push="SA-$STAGE_CAPITAL-TIB-User|tiu-dialog-log-push|tiu-dialog-log-push" 
+    tiu_dialog="SA-$STAGE_CAPITAL-TIB-User|tiu-dialog|tiu-dialog" 
+    tiu_engine="SA-$STAGE_CAPITAL-TIB-User|tiu-engine|tiu-engine" 
+    tiu_engine_log_push="SA-$STAGE_CAPITAL-TIB-User|tiu-engine-log-push|tiu-engine-log-push"
+
+    # SIT
+    tsc_appzone_log_push="SA-$STAGE_CAPITAL-CPE-User|tsc-log-push|tsc-appzone-log-push"
+    cpe_dmz_log_collector="SA-$STAGE_CAPITAL-CPE-User|cpe-dmz-log-collector|cpe-dmz-log-collector"
+
+    services=()
+    IFS=', ' read -r -a services <<< ${components}
+
+    for component in "${services[@]}"
+    do
+        component_parsed=${component//-/_}   # replaces _ with - since bash variables cannot have -  Ex: tl-engine will become tl_engine
+        echo "${action} ${component} ${component_parsed}"
+
+        temp=${!component_parsed}
+        # checking if component exists or not
+        if [[ -z ${temp} ]]; then
+            echo "${component} doesnt exist. Skipping."
+            continue
+        fi
+
+        component_details=(${!component_parsed//|/ })
+        osuser=${component_details[0]}
+        service=$STAGE-${component_details[1]}.service
+        timer=$STAGE-${component_details[1]}.timer
+        script=create-${component_details[2]}-installation.sh
+
+        # verifying if user exists for deploying
+        if [[ $action == "deploy" ]]
+        then
+            if [[ -z ${osuser} ]]
+            then
+                echo "User not found for deploying ${service}"
+                return 1
+            fi
+        fi
+
+        echo "Process systemd service '$service' for user '$osuser'"
+
+        echo "Stopping service ${service}"
+        sudo systemctl stop "$service"
+        #sleep 3
+        
+        
+        # checking if needed to deploy
+        if [[ $action == "deploy" ]]
+        then
+            #sudo su - $osuser -c "echo $password | podman login -u $username --password-stdin $REPOSITORY"
+            
+            echo "Running ${script} as ${osuser}"
+            sudo su - $osuser -c "cd /opt/travic/sit1/scripts && yes Y | ./$script"
+            sudo su - $osuser -c "cd /opt/travic/sit1/services && ./editServiceFile.sh -f $service"
+            if [ -f "/opt/travic/sit1/services/$service" ] ; then 
+                sudo mv /opt/travic/sit1/services/$service /etc/systemd/system/
+                sudo mv /opt/travic/sit1/services/$timer /etc/systemd/system/
+            fi
+            sudo systemctl daemon-reload
+            sudo systemctl enable $timer
+        fi
+
+        echo "Starting service ${service}"
+        sudo systemctl restart "${service}"
+
+        sudo systemctl status ${service}
+
+        echo "Done with service ${service}"
+    done
+  '''
+  return variables + script
+}
+
+pipeline {
+    agent any 
+    parameters {
+      booleanParam configRunParamKey
+      choice(name: envParamKey, choices: envChoices, description: '')
+      choice(name: actionParamKey, choices: actionChoices, description: '')
+
+      extendedChoice multiSelectDelimiter: ',', name: cpe1ParamKey, quoteValue: false, saveJSONParameterToFile: false, type: 'PT_MULTI_SELECT', value: CPE, visibleItemCount: 3
+      extendedChoice multiSelectDelimiter: ',', name: cpe2ParamKey, quoteValue: false, saveJSONParameterToFile: false, type: 'PT_MULTI_SELECT', value: CPE, visibleItemCount: 3
+
+      extendedChoice multiSelectDelimiter: ',', name: tcl1ParamKey, quoteValue: false, saveJSONParameterToFile: false, type: 'PT_MULTI_SELECT', value: TCL, visibleItemCount: 3
+      extendedChoice multiSelectDelimiter: ',', name: tcl2ParamKey, quoteValue: false, saveJSONParameterToFile: false, type: 'PT_MULTI_SELECT', value: TCL, visibleItemCount: 3
+      
+      extendedChoice multiSelectDelimiter: ',', name: tco1ParamKey, quoteValue: false, saveJSONParameterToFile: false, type: 'PT_MULTI_SELECT', value: TCO, visibleItemCount: 3
+      extendedChoice multiSelectDelimiter: ',', name: tco2ParamKey, quoteValue: false, saveJSONParameterToFile: false, type: 'PT_MULTI_SELECT', value: TCO, visibleItemCount: 3
+      
+      extendedChoice multiSelectDelimiter: ',', name: tpo1ParamKey, quoteValue: false, saveJSONParameterToFile: false, type: 'PT_MULTI_SELECT', value: TPO, visibleItemCount: 3
+      extendedChoice multiSelectDelimiter: ',', name: tpo2ParamKey, quoteValue: false, saveJSONParameterToFile: false, type: 'PT_MULTI_SELECT', value: TPO, visibleItemCount: 3
+      
+      extendedChoice multiSelectDelimiter: ',', name: tpx1ParamKey, quoteValue: false, saveJSONParameterToFile: false, type: 'PT_MULTI_SELECT', value: TPX, visibleItemCount: 3
+      extendedChoice multiSelectDelimiter: ',', name: tpx2ParamKey, quoteValue: false, saveJSONParameterToFile: false, type: 'PT_MULTI_SELECT', value: TPX, visibleItemCount: 3
+      
+      extendedChoice multiSelectDelimiter: ',', name: tib1ParamKey, quoteValue: false, saveJSONParameterToFile: false, type: 'PT_MULTI_SELECT', value: TIB, visibleItemCount: 3
+      extendedChoice multiSelectDelimiter: ',', name: tib2ParamKey, quoteValue: false, saveJSONParameterToFile: false, type: 'PT_MULTI_SELECT', value: TIB, visibleItemCount: 3
+      
+      extendedChoice multiSelectDelimiter: ',', name: sitParamKey, quoteValue: false, saveJSONParameterToFile: false, type: 'PT_MULTI_SELECT', value: SIT, visibleItemCount: 3
+    }
+    stages {
+      stage('Check Config Run') {
+        steps {
+              sh '''#!/bin/bash
+                      if [[ ${configrun} == "true" ]]; then
+                      echo "Loading the latest config. Please run the build again"
+                      exit 1
+                      fi
+                      if [[ -z ${configrun} ]]; then
+                      echo "Loading the config for first build. Please run the build again"
+                      exit 1
+                      fi
+              '''
+          }
+      }
+      stage('CPE1') {
+          // when {
+          //   expression {}
+          //   beforeAgent true
+          // }
+          agent {
+              label agents[params[envParamKey]]['cpe1']
+          }
+          steps {
+              echo "${params[actionParamKey]} ${params[cpe1ParamKey]} on CPE1"
+              sh getShellScript(params[cpe1ParamKey], params)
+          }
+      }
+
+      stage('CPE2') {
+          agent {
+              label agents[params[envParamKey]]['cpe2']
+          }
+          steps {
+              echo "${params[actionParamKey]} ${params[cpe2ParamKey]} on CPE2"
+              sh getShellScript(params[cpe2ParamKey], params)
+          }
+      }
+
+
+      stage('TCL1') {
+         agent {
+              label agents[params[envParamKey]]['tcl1']
+          }
+          steps {
+              echo "${params[actionParamKey]} ${params[tcl1ParamKey]} on TCL1"
+              sh getShellScript(params[tcl1ParamKey], params)
+          }
+      }
+      stage('TCL2') {
+         agent {
+              label agents[params[envParamKey]]['tcl2']
+          }
+          steps {
+              echo "${params[actionParamKey]} ${params[tcl2ParamKey]} on TCL2"
+               sh getShellScript(params[tcl2ParamKey], params)
+          }
+      }
+
+
+      stage('TCO1') {
+         agent {
+              label agents[params[envParamKey]]['tco1']
+          }
+          steps {
+              echo "${params[actionParamKey]} ${params[tco1ParamKey]} on TCO1"
+               sh getShellScript(params[tco1ParamKey], params)
+          }
+      }
+      stage('TCO2') {
+         agent {
+              label agents[params[envParamKey]]['tco2']
+          }
+          steps {
+              echo "${params[actionParamKey]} ${params[tco2ParamKey]} on TCO2"
+              sh getShellScript(params[tco2ParamKey], params)
+          }
+      }
+
+      stage('TPO1') {
+         agent {
+              label agents[params[envParamKey]]['tpo1']
+          }
+          steps {
+              echo "${params[actionParamKey]} ${params[tpo1ParamKey]} on TPO1"
+               sh getShellScript(params[tpo1ParamKey], params)
+          }
+      }
+      stage('TPO2') {
+         agent {
+              label agents[params[envParamKey]]['tpo2']
+          }
+          steps {
+              echo "${params[actionParamKey]} ${params[tpo2ParamKey]} on TPO2"
+              sh getShellScript(params[tpo2ParamKey], params)
+          }
+      }
+
+      stage('TPX1') {
+         agent {
+              label agents[params[envParamKey]]['tpx1']
+          }
+          steps {
+              echo "${params[actionParamKey]} ${params[tpx1ParamKey]} on TPX1"
+               sh getShellScript(params[tpx1ParamKey], params)
+          }
+      }
+      stage('TPX2') {
+         agent {
+              label agents[params[envParamKey]]['tpx2']
+          }
+          steps {
+              echo "${params[actionParamKey]} ${params[tpx2ParamKey]} on TPX2"
+              sh getShellScript(params[tpx2ParamKey], params)
+          }
+      }
+
+      stage('TIB1') {
+         agent {
+              label agents[params[envParamKey]]['tib1']
+          }
+          steps {
+              echo "${params[actionParamKey]} ${params[tib1ParamKey]} on TIB1"
+               sh getShellScript(params[tib1ParamKey], params)
+          }
+      }
+      stage('TIB2') {
+         agent {
+              label agents[params[envParamKey]]['tib2']
+          }
+          steps {
+              echo "${params[actionParamKey]} ${params[tib2ParamKey]} on TIB2"
+              sh getShellScript(params[tib2ParamKey], params)
+          }
+      }
+
+     stage('SIT') {
+         agent {
+              label agents[params[envParamKey]]['sit']
+          }
+          steps {
+              echo "${params[actionParamKey]} ${params[sitParamKey]} on SIT"
+              sh getShellScript(params[sitParamKey], params)
+          }
+     }
+    }
+}
